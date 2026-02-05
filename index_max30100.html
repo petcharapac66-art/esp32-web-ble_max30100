@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ESP32 MAX30100 Web BLE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      text-align: center;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+
+    h1 {
+      margin-top: 20px;
+    }
+
+    .card {
+      background: #020617;
+      padding: 20px;
+      margin: 20px auto;
+      width: 280px;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0,255,255,0.15);
+    }
+
+    .value {
+      font-size: 2.5rem;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+
+    .unit {
+      font-size: 1rem;
+      color: #94a3b8;
+    }
+
+    button {
+      padding: 12px 20px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      margin: 5px;
+    }
+
+    .connect {
+      background: #22c55e;
+      color: #022c22;
+    }
+
+    .disconnect {
+      background: #ef4444;
+      color: white;
+    }
+
+    .status {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #38bdf8;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>ESP32 MAX30100</h1>
+
+  <button class="connect" onclick="connectBLE()">Connect</button>
+  <button class="disconnect" onclick="disconnectBLE()">Disconnect</button>
+
+  <div class="status" id="status">Not connected</div>
+
+  <div class="card">
+    <div>Heart Rate</div>
+    <div class="value" id="hr">--</div>
+    <div class="unit">bpm</div>
+  </div>
+
+  <div class="card">
+    <div>SpO₂</div>
+    <div class="value" id="spo2">--</div>
+    <div class="unit">%</div>
+  </div>
+
+<script>
+  let device;
+  let characteristic;
+
+  const serviceUUID = '19b10000-e8f2-537e-4f6c-d104768a1214';
+  const sensorCharUUID = '19b10001-e8f2-537e-4f6c-d104768a1214';
+
+  async function connectBLE() {
+    try {
+      document.getElementById('status').innerText = 'Connecting...';
+
+      device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [serviceUUID] }]
+      });
+
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService(serviceUUID);
+      characteristic = await service.getCharacteristic(sensorCharUUID);
+
+      await characteristic.startNotifications();
+      characteristic.addEventListener(
+        'characteristicvaluechanged',
+        handleNotification
+      );
+
+      device.addEventListener('gattserverdisconnected', onDisconnected);
+
+      document.getElementById('status').innerText = 'Connected';
+    } catch (error) {
+      console.error(error);
+      document.getElementById('status').innerText = 'Connection failed';
+    }
+  }
+
+  function disconnectBLE() {
+    if (device && device.gatt.connected) {
+      device.gatt.disconnect();
+    }
+  }
+
+  function onDisconnected() {
+    document.getElementById('status').innerText = 'Disconnected';
+    document.getElementById('hr').innerText = '--';
+    document.getElementById('spo2').innerText = '--';
+  }
+
+  function handleNotification(event) {
+    const value = new TextDecoder().decode(event.target.value);
+    // format: HR,SpO2
+    const parts = value.split(',');
+
+    if (parts.length === 2) {
+      const hr = parseFloat(parts[0]);
+      const spo2 = parseFloat(parts[1]);
+
+      if (!isNaN(hr)) {
+        document.getElementById('hr').innerText = hr.toFixed(1);
+      }
+      if (!isNaN(spo2)) {
+        document.getElementById('spo2').innerText = spo2.toFixed(1);
+      }
+    }
+  }
+</script>
+
+</body>
+</html>
